@@ -153,7 +153,7 @@ int main(void) {
 
     // Object tracking logic
     float angle_deg = 90.0; // Default center
-    const float SENSOR_DISTANCE = 1.0; // Sensor spacing (cm)
+    const float SENSOR_DISTANCE = 10.0; // Sensor spacing (cm)
 
     if (dist1 < 400.0 || dist2 < 400.0) {
       float diff = dist2 - dist1;
