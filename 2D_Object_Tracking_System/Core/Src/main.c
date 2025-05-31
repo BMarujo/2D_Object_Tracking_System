@@ -130,19 +130,19 @@ void update_leds(float angle_deg) {
   }
   else if (angle_deg < LEFT_RED_THRESHOLD) {
     // Far left - Left Red
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
   }
   else if (angle_deg < LEFT_YELLOW_THRESHOLD) {
     // Between center and far left - Left Yellow
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
   }
   else if (angle_deg > RIGHT_RED_THRESHOLD) {
     // Far right - Right Red
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
   }
   else if (angle_deg > RIGHT_YELLOW_THRESHOLD) {
     // Between center and far right - Right Yellow
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
   }
 }
 /* USER CODE END 0 */
