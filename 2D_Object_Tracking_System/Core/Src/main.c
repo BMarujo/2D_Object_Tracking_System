@@ -21,7 +21,7 @@
 #include "math.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>  // Added for printf
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+// LED angle thresholds
+#define LEFT_RED_THRESHOLD 30.0      // 0-30°
+#define LEFT_YELLOW_THRESHOLD 60.0   // 30-60°
+#define CENTER_THRESHOLD_LOW 85.0    // 85-95° (center zone)
+#define CENTER_THRESHOLD_HIGH 95.0
+#define RIGHT_YELLOW_THRESHOLD 120.0 // 120-150°
+#define RIGHT_RED_THRESHOLD 150.0    // 150-180°
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,7 +48,6 @@
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
-
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -57,16 +62,19 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_TIM1_Init(void);
-static void MX_TIM2_Init(void);
-/* USER CODE END PFP */
 void delay_us(uint16_t us);
+/* USER CODE END PFP */
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// UART support for printf
+int __io_putchar(int ch) {
+    HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
+    return ch;
+}
+
+// EXTI Callback for ultrasonic sensors
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   static uint16_t rising_time1 = 0, rising_time2 = 0;
   static uint8_t state1 = 0, state2 = 0;
@@ -99,14 +107,44 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   }
 }
 
-// --- Microsecond Delay ---
+// Microsecond Delay
 void delay_us(uint16_t us) {
   for (uint32_t i = 0; i < us * 10; i++) {
-    __NOP(); // ~100ns per NOP (adjust for 100MHz clock)
+    __NOP(); // ~100ns per NOP at 100MHz
   }
 }
-/* USER CODE END 0 */
 
+// Update LED indicators based on angle
+void update_leds(float angle_deg) {
+  // Turn off all LEDs first
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Left Red
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET); // Left Yellow
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET); // Green
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); // Right Yellow
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET); // Right Red
+
+  // Determine which LED to light based on angle
+  if (angle_deg >= CENTER_THRESHOLD_LOW && angle_deg <= CENTER_THRESHOLD_HIGH) {
+    // Center position - Green LED
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+  }
+  else if (angle_deg < LEFT_RED_THRESHOLD) {
+    // Far left - Left Red
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+  }
+  else if (angle_deg < LEFT_YELLOW_THRESHOLD) {
+    // Between center and far left - Left Yellow
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
+  }
+  else if (angle_deg > RIGHT_RED_THRESHOLD) {
+    // Far right - Right Red
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+  }
+  else if (angle_deg > RIGHT_YELLOW_THRESHOLD) {
+    // Between center and far right - Right Yellow
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -117,6 +155,7 @@ int main(void) {
   HAL_Init();
   SystemClock_Config();
   MX_GPIO_Init();
+  MX_USART2_UART_Init();  // Initialize UART
   MX_TIM1_Init();
   MX_TIM2_Init();
 
@@ -124,6 +163,13 @@ int main(void) {
   HAL_TIM_Base_Start(&htim2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 1500); // Center servo
+
+  // Initialize LEDs to OFF
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+
+  printf("System Started\r\n");
   /* USER CODE END 2 */
 
   while (1) {
@@ -165,6 +211,13 @@ int main(void) {
     // Convert angle to PWM pulse (1000µs=0°, 2000µs=180°)
     uint32_t pulse = 1000 + (uint32_t)(angle_deg * (1000.0 / 180.0));
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pulse);
+
+    // Update LED indicators
+    update_leds(angle_deg);
+
+    // Debug output
+    printf("S1: %luµs (%.1fcm) | S2: %luµs (%.1fcm) | Angle: %.1f°\r\n",
+           pulse_width1, dist1, pulse_width2, dist2, angle_deg);
 
     HAL_Delay(50); // Cycle delay
   }
@@ -388,10 +441,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, TRIG1_Pin|TRIG2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, TRIG1_Pin|TRIG2_Pin|GPIO_PIN_6, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -399,19 +455,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : PA5 PA6 PA7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : TRIG1_Pin TRIG2_Pin */
-  GPIO_InitStruct.Pin = TRIG1_Pin|TRIG2_Pin;
+  /*Configure GPIO pins : TRIG1_Pin TRIG2_Pin PB6 */
+  GPIO_InitStruct.Pin = TRIG1_Pin|TRIG2_Pin|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ECHO1_Pin ECHO2_Pin */
   GPIO_InitStruct.Pin = ECHO1_Pin|ECHO2_Pin;
