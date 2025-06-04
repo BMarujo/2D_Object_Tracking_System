@@ -1,0 +1,10 @@
+17:00:55 **** Incremental Build of configuration Debug for project 2D_Object_Tracking_System ****
+make -j16 all 
+arm-none-eabi-size  2D_Object_Tracking_System.elf 
+   text	   data	    bss	    dec	    hex	filename
+  20024	    104	   2144	  22272	   5700	2D_Object_Tracking_System.elf
+Finished building: default.size.stdout
+ 
+
+17:00:55 Build Finished. 0 errors, 0 warnings. (took 97ms)
+
